@@ -34,9 +34,17 @@ if num_devices == 0:
 
 for i in range(num_devices):
     dev_info = p.get_device_info_by_index(i)
-    if dev_info.get('maxInputChannels', 0) > 0: # Check if it's an input device
+    # Check if it's an input device by looking for maxInputChannels > 0
+    if dev_info.get('maxInputChannels', 0) > 0:
         print(f"\nInput Device ID {i} - {dev_info.get('name', 'Unknown Device')}")
-        print(f"  Host API: {dev_info.get('hostApi')_info.get('name', 'Unknown API')}") # Shows ALSA, etc.
+        try:
+            # Corrected line to get Host API name:
+            host_api_info = p.get_host_api_info_by_index(dev_info.get('hostApi'))
+            host_api_name = host_api_info.get('name', 'Unknown API')
+            print(f"  Host API: {host_api_name} (Type: {host_api_info.get('type')})")
+        except Exception as e_host_api:
+            print(f"  Host API: Error retrieving - {e_host_api}")
+            
         print(f"  Default Sample Rate: {dev_info.get('defaultSampleRate', 'N/A')}")
         print(f"  Max Input Channels: {dev_info.get('maxInputChannels', 'N/A')}")
         
@@ -51,7 +59,7 @@ for i in range(num_devices):
                     input_format=pyaudio.paInt16
                 )
                 print(f"  Supports {rate} Hz (1 ch, 16-bit): {is_supported}")
-            except pyaudio.PaError: # Catch specific error for format check
+            except pyaudio.PaError: 
                 print(f"  Format (1 ch, 16-bit) not directly supported or check failed for {rate} Hz")
         print("-" * 20)
 
