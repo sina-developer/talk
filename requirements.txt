@@ -1,3 +1,2 @@
 requests
 PyAudio
-# No sounddevice, soundfile, or numpy

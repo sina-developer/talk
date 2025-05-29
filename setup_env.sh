@@ -1,11 +1,7 @@
 #!/bin/bash
 
-# This script prepares the environment for the Python audio chatter application
-# (PyAudio version) on Debian/Ubuntu-based Linux systems.
-
-echo "Starting environment setup for Audio Chatter Python script (PyAudio version)..."
+echo "Starting environment setup for Audio Chatter Python script (PyAudio/ffplay version)..."
 echo "This script will use 'sudo' for system-wide package installations."
-
 set -e
 
 echo ""
@@ -13,27 +9,23 @@ echo "Step 1: Updating package lists..."
 sudo apt-get update
 
 echo ""
-echo "Step 2: Installing Python 3, pip, and python3-venv..."
+echo "Step 2: Installing Python 3, pip, python3-venv, python3-dev..."
 sudo apt-get install -y python3 python3-pip python3-venv python3-dev
 
 echo ""
-echo "Step 3: Installing system dependencies for PyAudio..."
-echo " PyAudio requires PortAudio development files (portaudio19-dev) and potentially others."
-sudo apt-get install -y libportaudio2 portaudio19-dev alsa-utils
+echo "Step 3: Installing system dependencies for PyAudio and FFmpeg (for ffplay)..."
+sudo apt-get install -y libportaudio2 portaudio19-dev alsa-utils ffmpeg # ADDED ffmpeg
 
 echo ""
 echo "Step 4: Checking for requirements.txt..."
 if [ ! -f "requirements.txt" ]; then
-    echo "ERROR: requirements.txt not found in the current directory."
-    echo "Please create it with content:"
-    echo "requests"
-    echo "PyAudio"
+    echo "ERROR: requirements.txt not found."
+    echo "Please create it with content: requests, PyAudio"
     exit 1
-else
-    echo "requirements.txt found."
 fi
+echo "requirements.txt found."
 
-VENV_DIR="venv_audio_chatter_pyaudio" # Changed venv directory name
+VENV_DIR="venv_audio_chatter_pyaudio"
 echo ""
 echo "Step 5: Setting up Python virtual environment in './${VENV_DIR}'..."
 if [ -d "$VENV_DIR" ]; then
@@ -53,21 +45,12 @@ deactivate
 
 echo ""
 echo "---------------------------------------------------------------------"
-echo "Setup Complete! (PyAudio version)"
+echo "Setup Complete! (PyAudio/ffplay version)"
 echo "---------------------------------------------------------------------"
-echo ""
 echo "Next Steps:"
-echo "1. Activate the virtual environment in your terminal:"
-echo "   source ${VENV_DIR}/bin/activate"
+echo "1. Activate the virtual environment: source ${VENV_DIR}/bin/activate"
+echo "2. Ensure microphone is configured (alsamixer)."
+echo "3. Run the Python script: python audio_chatter.py"
+echo "4. To deactivate: deactivate"
 echo ""
-echo "2. Ensure your microphone is not muted and is selected as the default input."
-echo "   Use 'alsamixer' or your desktop sound settings."
-echo ""
-echo "3. Run the Python script (e.g., audio_chatter.py with PyAudio changes):"
-echo "   python audio_chatter.py"
-echo ""
-echo "4. When you are done, deactivate the virtual environment by typing:"
-echo "   deactivate"
-echo ""
-
 exit 0
