@@ -20,7 +20,7 @@ print("Subprocess imported.")
 # --- Configuration ---
 SAMPLE_RATE = 48000
 CHANNELS = 1
-UPLOAD_URL = 'https://n8n.c-na.dev/webhook-test/talk'
+UPLOAD_URL = 'https://n8n.c-na.dev/webhook/talk'
 TEMP_DIR = tempfile.gettempdir()
 TEMP_RECORDING_FILENAME = "manual_recording_pyaudio.wav"
 TEMP_RESPONSE_FILENAME = "response_audio.mp3" # MODIFIED: Save as .mp3
