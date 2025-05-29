@@ -1,4 +1,3 @@
 requests
-sounddevice
-soundfile
-# numpy will be installed as a dependency of sounddevice/soundfile
+PyAudio
+# No sounddevice, soundfile, or numpy
