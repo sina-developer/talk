@@ -16,7 +16,7 @@ import threading
 print("Threading imported.")
 
 # --- Configuration ---
-SAMPLE_RATE = 44100  # Standard sample rate
+SAMPLE_RATE = 48000  # Standard sample rate
 CHANNELS = 1
 UPLOAD_URL = 'https://n8n.c-na.dev/webhook-test/talk'
 TEMP_DIR = tempfile.gettempdir()
