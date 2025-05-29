@@ -1,8 +1,4 @@
 requests
 sounddevice
 soundfile
-numpy
-# inquirer was for the Node.js version, not needed for the Python script
-# unless you added it to the Python script for CLI prompts.
-# If your Python script uses inquirer, add it here:
-# inquirer
+# numpy will be installed as a dependency of sounddevice/soundfile

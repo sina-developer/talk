@@ -1,129 +1,125 @@
-print("Python script execution started!") # <-- ADDED THIS LINE
+print("Python script execution started!") # For debugging startup
 
 import requests
-print("Requests imported.") # <-- ADDED THIS LINE
+print("Requests imported.")
 import sounddevice as sd
-print("Sounddevice imported.") # <-- ADDED THIS LINE
+print("Sounddevice imported.")
 import soundfile as sf
-print("Soundfile imported.") # <-- ADDED THIS LINE
+print("Soundfile imported.")
 import time
-print("Time imported.") # <-- ADDED THIS LINE
+print("Time imported.")
 import os
-print("OS imported.") # <-- ADDED THIS LINE
+print("OS imported.")
 import tempfile
-print("Tempfile imported.") # <-- ADDED THIS LINE
-import numpy as np
-print("Numpy imported.") # <-- ADDED THIS LINE
+print("Tempfile imported.")
+import threading # For manual stop
+print("Threading imported.")
 
-# Configuration
-# RECORD_SECONDS = 5 # Kept for reference, but VAD is primary
+# --- Configuration ---
 SAMPLE_RATE = 44100  # Standard sample rate
 CHANNELS = 1
-UPLOAD_URL = 'https://n8n.c-na.dev/webhook-test/talk' # User's original URL
-TEMP_RECORDING_FILENAME = "temp_recording.wav"
-TEMP_RESPONSE_FILENAME = "temp_response.wav"
+UPLOAD_URL = 'https://n8n.c-na.dev/webhook-test/talk'
+TEMP_DIR = tempfile.gettempdir() # Define TEMP_DIR globally or pass to functions
+TEMP_RECORDING_FILENAME = "manual_recording.wav"
+TEMP_RESPONSE_FILENAME = "response_audio.wav" # Give a distinct name
 
-# VAD Configurations
-CHUNK_DURATION_MS = 50  # Duration of each audio chunk in milliseconds
-SILENCE_THRESHOLD = 0.008  # RMS amplitude threshold for silence (needs tuning)
-MIN_SILENCE_DURATION_MS = 1500 # Silence duration in ms to trigger recording stop
-MAX_RECORDING_DURATION_S = 30  # Maximum recording time in seconds
-PRE_SPEECH_BUFFER_MS = 200 # Keep some audio before speech starts
+# Manual recording settings
+CHUNK_FRAMES = 1024  # Number of frames per chunk read from the stream
+MAX_RECORDING_DURATION_S = 300  # Optional: A safety max duration (5 minutes)
 
-print("Configuration variables set.") # <-- ADDED THIS LINE
+print("Configuration variables set.")
 
-def record_audio_vad(filename, samplerate, channels,
-                     chunk_duration_ms=CHUNK_DURATION_MS,
-                     silence_threshold=SILENCE_THRESHOLD,
-                     min_silence_duration_ms=MIN_SILENCE_DURATION_MS,
-                     max_recording_duration_s=MAX_RECORDING_DURATION_S,
-                     pre_speech_buffer_ms=PRE_SPEECH_BUFFER_MS):
-    """Records audio from the microphone, stopping when silence is detected."""
-    print(f"Debug: record_audio_vad called with filename: {filename}")
+# --- Global variables for recording thread ---
+_recorded_frames_list = []
+_stop_event = threading.Event()
+_recording_error = None
 
-    chunk_frames = int(samplerate * chunk_duration_ms / 1000)
-    min_silence_chunks = min_silence_duration_ms // chunk_duration_ms
-    pre_speech_chunks = pre_speech_buffer_ms // chunk_duration_ms
-    max_chunks = (max_recording_duration_s * 1000) // chunk_duration_ms
-
-    print(f"Listening... Speak into the microphone. Recording will stop after {min_silence_duration_ms/1000:.1f}s of silence.")
-    print(f"(Silence threshold: {silence_threshold}, Max duration: {max_recording_duration_s}s)")
-    print(f"Debug: chunk_frames={chunk_frames}, min_silence_chunks={min_silence_chunks}, pre_speech_chunks={pre_speech_chunks}, max_chunks={max_chunks}")
-
-    recorded_frames_list = []
-    silence_counter = 0
-    has_spoken = False
+def _record_worker(samplerate, channels, chunk_frames):
+    """Worker function to run in a separate thread for recording."""
+    global _recorded_frames_list, _stop_event, _recording_error
     
-    pre_buffer = [np.zeros((chunk_frames, channels), dtype=np.int16) for _ in range(pre_speech_chunks)]
-    print("Debug: Pre_buffer initialized.")
+    _recorded_frames_list = [] # Clear previous recording
+    _recording_error = None    # Reset error state
 
-    stream = None # Initialize stream to None for finally block
     try:
-        print("Debug: Attempting to open sd.InputStream...")
-        stream = sd.InputStream(samplerate=samplerate, channels=channels, dtype='int16', blocksize=chunk_frames)
-        print("Debug: sd.InputStream opened successfully.")
-        with stream:
-            print("Debug: Entered stream context manager.")
-            for i in range(max_chunks):
-                # print(f"Debug: Reading chunk {i+1}/{max_chunks}") # Can be very verbose
+        print("Debug: Record worker thread started.")
+        with sd.InputStream(samplerate=samplerate, channels=channels,
+                             dtype='int16', blocksize=chunk_frames) as stream:
+            print("Debug: sd.InputStream opened in worker.")
+            while not _stop_event.is_set():
                 audio_chunk, overflowed = stream.read(chunk_frames)
                 if overflowed:
-                    print("Warning: Input overflowed!")
-
-                pre_buffer.pop(0)
-                pre_buffer.append(audio_chunk.copy())
-
-                rms = np.sqrt(np.mean(audio_chunk.astype(np.float32)**2))
-                # print(f"Chunk {i}, RMS: {rms:.4f}, Silence Counter: {silence_counter}") # For detailed RMS debugging
-
-                if rms > silence_threshold:
-                    if not has_spoken:
-                        print("Speech detected, recording...")
-                        for pre_chunk in pre_buffer:
-                            recorded_frames_list.append(pre_chunk)
-                        has_spoken = True
-                    else:
-                        recorded_frames_list.append(audio_chunk)
-                    silence_counter = 0
-                elif has_spoken:
-                    recorded_frames_list.append(audio_chunk)
-                    silence_counter += 1
-                    if silence_counter >= min_silence_chunks:
-                        print(f"Silence detected for {min_silence_duration_ms/1000:.1f}s. Stopping recording.")
-                        break
-            else: 
-                if has_spoken:
-                    print("Max recording duration reached.")
-                else:
-                    print("Max recording duration reached, but no speech was detected.")
-                    recorded_frames_list = []
-        print("Debug: Exited stream context manager.")
-
+                    print("Warning: Input overflowed during recording!")
+                _recorded_frames_list.append(audio_chunk.copy()) # audio_chunk is a NumPy array
+            print("Debug: Stop event received by worker, exiting record loop.")
     except Exception as e:
-        print(f"ERROR in record_audio_vad stream processing: {e}")
-        if stream: # Attempt to close if open
-             if not stream.closed:
-                stream.close()
+        print(f"ERROR in recording worker thread: {e}")
+        _recording_error = e
+    finally:
+        print("Debug: Record worker thread finished.")
+
+def record_audio_manual(filename, samplerate, channels):
+    """Records audio manually, starting and stopping with Enter key."""
+    global _stop_event, _recorded_frames_list, _recording_error
+
+    print(f"Preparing to record to {filename}")
+    _stop_event.clear() # Reset event for a new recording
+
+    input("Press Enter to START recording...")
+    print("Starting recording worker thread...")
+    
+    recording_thread = threading.Thread(target=_record_worker, args=(samplerate, channels, CHUNK_FRAMES))
+    recording_thread.start()
+    print("Recording... Press Enter to STOP.")
+
+    # Optional: Implement max duration timeout for input()
+    # This is tricky with standard input() which is blocking.
+    # For simplicity, we rely on user pressing Enter.
+    # Or, the main loop could have a separate timeout mechanism if desired.
+
+    input() # Wait for user to press Enter to stop
+    
+    print("Stop signal received. Finalizing recording...")
+    _stop_event.set()
+    recording_thread.join(timeout=5) # Wait for thread to finish, with a timeout
+
+    if recording_thread.is_alive():
+        print("Warning: Recording thread did not finish cleanly after stop signal.")
+        return False
+        
+    if _recording_error:
+        print(f"Recording failed due to an error in the worker: {_recording_error}")
         return False
 
-
-    if not recorded_frames_list:
-        print("No audio recorded (either no speech or only silence).")
+    if not _recorded_frames_list:
+        print("No audio frames were recorded.")
         return False
 
     try:
-        final_recording = np.concatenate(recorded_frames_list, axis=0)
-        sf.write(filename, final_recording, samplerate)
-        print(f"Recording finished and saved to {filename}")
+        print(f"Saving recording with {_len_recorded_frames_list()} chunks...")
+        with sf.SoundFile(filename, mode='w', samplerate=samplerate, 
+                          channels=channels, subtype='PCM_16') as audio_file:
+            for chunk in _recorded_frames_list:
+                audio_file.write(chunk) # soundfile handles NumPy array chunks directly
+        print(f"Recording saved to {filename}")
         return True
     except Exception as e:
         print(f"ERROR saving recorded audio: {e}")
         return False
+    finally:
+        _recorded_frames_list = [] # Clear frames for next recording
+
+def _len_recorded_frames_list(): # Helper to avoid issues if _recorded_frames_list is None or not list
+    global _recorded_frames_list
+    return len(_recorded_frames_list) if isinstance(_recorded_frames_list, list) else 0
 
 
 def upload_audio(url, filepath):
     """Uploads an audio file to the specified URL and saves the response."""
     print(f"Uploading {filepath} to {url}...")
+    if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
+        print(f"Error: File {filepath} does not exist or is empty. Skipping upload.")
+        return None
     try:
         with open(filepath, 'rb') as f:
             files = {'audio': (os.path.basename(filepath), f, 'audio/wav')}
@@ -131,10 +127,11 @@ def upload_audio(url, filepath):
             response.raise_for_status()
 
         if response.content:
-            with open(TEMP_RESPONSE_FILENAME, 'wb') as out_file:
+            response_audio_path = os.path.join(TEMP_DIR, TEMP_RESPONSE_FILENAME)
+            with open(response_audio_path, 'wb') as out_file:
                 out_file.write(response.content)
-            print(f"Audio response saved to {TEMP_RESPONSE_FILENAME}")
-            return TEMP_RESPONSE_FILENAME
+            print(f"Audio response saved to {response_audio_path}")
+            return response_audio_path
         else:
             print("No content in response.")
             return None
@@ -145,91 +142,90 @@ def upload_audio(url, filepath):
         print(f"An unexpected error occurred during upload: {e}")
         return None
 
-def play_audio(filename):
+def play_audio(filename_path):
     """Plays an audio file."""
-    if filename and os.path.exists(filename):
+    if filename_path and os.path.exists(filename_path) and os.path.getsize(filename_path) > 0:
         try:
-            print(f"Playing {filename}...")
-            data, fs = sf.read(filename, dtype='float32')
+            print(f"Playing {filename_path}...")
+            data, fs = sf.read(filename_path, dtype='float32')
             sd.play(data, fs)
             sd.wait()
             print("Playback finished.")
         except Exception as e:
             print(f"Error playing audio: {e}")
     else:
-        print("Response audio file not found or no response to play.")
+        print(f"Response audio file not found, empty, or no response to play: {filename_path}")
 
-print("Functions defined.") # <-- ADDED THIS LINE (or ensure it's after all func defs)
+print("Functions defined.")
 
 def main_loop():
     """Main loop to record, upload, receive, and play audio."""
-    print("Main_loop started.") # <-- ADDED THIS LINE
-    temp_dir = tempfile.gettempdir() # Using system temp dir
-    # Ensure temp filenames are joined with this temp_dir for consistency
-    global TEMP_RECORDING_FILENAME, TEMP_RESPONSE_FILENAME
-    temp_recording_path = os.path.join(temp_dir, TEMP_RECORDING_FILENAME)
-    temp_response_path = os.path.join(temp_dir, TEMP_RESPONSE_FILENAME)
-    print(f"Debug: Temp recording path: {temp_recording_path}")
-    print(f"Debug: Temp response path: {temp_response_path}")
+    print("Main_loop started.")
+    # Ensure TEMP_DIR exists
+    if not os.path.exists(TEMP_DIR):
+        os.makedirs(TEMP_DIR, exist_ok=True)
+        print(f"Created temp directory: {TEMP_DIR}")
 
-
+    temp_recording_path = os.path.join(TEMP_DIR, TEMP_RECORDING_FILENAME)
+    
     try:
         while True:
-            print("About to ask for input...") # <-- ADDED THIS LINE
-            user_input = input("Press Enter to start recording (will stop on silence), or type 'q' to quit: ")
-            print(f"Input received: '{user_input}'") # <-- ADDED THIS LINE
-
-            if user_input.lower() == 'q':
-                print("Quitting main loop.")
+            print("\n--- New Cycle ---")
+            user_choice = input("Press Enter to Record, or type 'q' to quit: ").lower()
+            if user_choice == 'q':
+                print("Exiting...")
                 break
 
-            print("Proceeding with recording.") # <-- ADDED THIS LINE
-
-            if record_audio_vad(temp_recording_path, SAMPLE_RATE, CHANNELS):
-                if os.path.exists(temp_recording_path):
+            if record_audio_manual(temp_recording_path, SAMPLE_RATE, CHANNELS):
+                if os.path.exists(temp_recording_path) and os.path.getsize(temp_recording_path) > 44: # Check if file exists and has more than WAV header
                     print(f"Debug: Recording file exists at {temp_recording_path}, proceeding to upload.")
                     response_audio_path = upload_audio(UPLOAD_URL, temp_recording_path)
                     if response_audio_path:
                         play_audio(response_audio_path)
+                        # Clean up response audio
                         try:
-                            # os.remove(response_audio_path) # Optional: clean up
-                            print(f"Debug: Would remove response audio at {response_audio_path} if uncommented.")
+                            os.remove(response_audio_path)
+                            print(f"Cleaned up response audio: {response_audio_path}")
                         except OSError as e:
                             print(f"Error removing temporary response file: {e}")
                     else:
-                        print("No audio response to play.")
+                        print("No audio response to play or error during upload.")
+                    # Clean up recording
                     try:
-                        # os.remove(temp_recording_path) # Optional: clean up
-                        print(f"Debug: Would remove recording audio at {temp_recording_path} if uncommented.")
+                        os.remove(temp_recording_path)
+                        print(f"Cleaned up recording: {temp_recording_path}")
                     except OSError as e:
                         print(f"Error removing temporary recording file: {e}")
                 else:
-                    print(f"Debug: Recording file {temp_recording_path} NOT found after VAD success. Skipping upload.")
+                    print(f"Recording file {temp_recording_path} is missing, empty, or invalid. Skipping upload.")
             else:
-                print("Recording was skipped or failed (e.g., no speech detected or error).")
+                print("Recording was skipped or failed.")
 
-            print("\nWaiting for next recording cycle...")
     except KeyboardInterrupt:
         print("\nExiting application due to KeyboardInterrupt.")
     except Exception as e:
         print(f"An unexpected error occurred in main_loop: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         print("Main_loop finally block reached.")
-        # Clean up temporary files on exit
+        # Clean up any remaining specific temp files if they exist
         if os.path.exists(temp_recording_path) and os.path.isfile(temp_recording_path):
             try:
                 os.remove(temp_recording_path)
-                print(f"Cleaned up {temp_recording_path}")
+                print(f"Cleaned up lingering recording: {temp_recording_path}")
             except OSError as e:
-                print(f"Error removing temporary recording file on exit: {e}")
-        if os.path.exists(temp_response_path) and os.path.isfile(temp_response_path):
+                print(f"Error removing temp recording on exit: {e}")
+        
+        response_audio_final_path = os.path.join(TEMP_DIR, TEMP_RESPONSE_FILENAME)
+        if os.path.exists(response_audio_final_path) and os.path.isfile(response_audio_final_path):
             try:
-                os.remove(temp_response_path)
-                print(f"Cleaned up {temp_response_path}")
+                os.remove(response_audio_final_path)
+                print(f"Cleaned up lingering response audio: {response_audio_final_path}")
             except OSError as e:
-                print(f"Error removing temporary response file on exit: {e}")
-        print("Script cleanup done. Exiting.")
+                print(f"Error removing temp response audio on exit: {e}")
+        print("Script cleanup attempt done. Exiting.")
 
 if __name__ == "__main__":
-    print("Script reached __main__ block.") # <-- ADDED THIS LINE
+    print("Script reached __main__ block.")
     main_loop()
