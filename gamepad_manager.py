@@ -6,7 +6,7 @@ import os
 import sys
 import time
 import select
-from evdev import InputDevice, categorize, ecodes, list_devices
+from evdev import InputDevice, categorize, ecodes, list_devices # KeyEvent is in evdev.events
 
 import config
 import audio_recorder
@@ -47,18 +47,16 @@ def detect_gamepad_interactively(timeout_seconds=config.GAMEPAD_DETECT_TIMEOUT_S
                 # else: # Device doesn't have typical gamepad keys
                 #     pass # It will be closed in the cleanup loop
             except Exception: 
-                # This 'dev' might not have been fully initialized or might be None
-                # The cleanup loop handles devices in opened_devices_for_cleanup
                 pass
     except Exception as e:
         print(f"Error listing/filtering devices: {e}.")
-        for dev_to_close in opened_devices_for_cleanup: # Ensure all opened are attempted to be closed
+        for dev_to_close in opened_devices_for_cleanup: 
             try: dev_to_close.close()
             except: pass
         return None
     if not monitored_devices_map:
         print("No gamepad-like devices found to monitor."); 
-        for dev_to_close in opened_devices_for_cleanup: # Close all scanned devices
+        for dev_to_close in opened_devices_for_cleanup: 
             try: dev_to_close.close()
             except: pass
         return None
@@ -72,37 +70,51 @@ def detect_gamepad_interactively(timeout_seconds=config.GAMEPAD_DETECT_TIMEOUT_S
             device_that_fired = monitored_devices_map[fd]
             try:
                 for event in device_that_fired.read(): 
-                    if event.type == ecodes.EV_KEY and event.value == 1:
+                    if event.type == ecodes.EV_KEY and event.value == 1: # event.value == 1 is key_down
                         print(f"\nButton press on: {device_that_fired.name} ({device_that_fired.path})")
                         detected_device_object = device_that_fired; break 
                 if detected_device_object: break 
             except Exception as e: print(f"Error reading from {device_that_fired.path}: {e}")
             if detected_device_object: break
             
-    # Close all monitored devices EXCEPT the one that was detected (if any)
     for fd_to_close, dev_to_close in monitored_devices_map.items():
         if detected_device_object and dev_to_close.fd == detected_device_object.fd:
             continue 
         try: dev_to_close.close()
         except: pass
     
-    # Also close any devices from the initial scan that weren't monitored and aren't the detected one
     for dev_to_clean in opened_devices_for_cleanup:
         is_detected_device = detected_device_object and dev_to_clean.path == detected_device_object.path
-        was_monitored = dev_to_clean.fd in monitored_devices_map # Check if it was even in the map
-
         if not is_detected_device:
-            # If it was monitored, it's already handled by the loop above.
-            # If not monitored, it means it was opened but filtered out before select.
-            # This check ensures we don't try to double-close or close if it wasn't monitored.
-            # The simplest here is just to ensure that if it's not the detected one, it's closed.
              try:
-                 # Check if it was the one we are returning, if so, don't close
                  if not (detected_device_object and dev_to_clean.fd == detected_device_object.fd):
                     dev_to_clean.close()
              except: pass
     return detected_device_object
 
+
+def get_user_friendly_button_name(button_code, default_name_if_list=None):
+    """Gets a user-friendly name for a button code."""
+    name_or_list = ecodes.bytype[ecodes.EV_KEY].get(button_code)
+    if isinstance(name_or_list, list):
+        if default_name_if_list and default_name_if_list in name_or_list:
+            return default_name_if_list
+        # Try to pick a common or primary name from the list
+        if 'BTN_A' in name_or_list: return 'BTN_A (A)'
+        if 'BTN_SOUTH' in name_or_list: return 'BTN_SOUTH (A)'
+        if 'BTN_B' in name_or_list: return 'BTN_B (B)'
+        if 'BTN_EAST' in name_or_list: return 'BTN_EAST (B)'
+        if 'BTN_X' in name_or_list: return 'BTN_X (X)'
+        if 'BTN_WEST' in name_or_list: return 'BTN_WEST (X)'
+        if 'BTN_Y' in name_or_list: return 'BTN_Y (Y)'
+        if 'BTN_NORTH' in name_or_list: return 'BTN_NORTH (Y)'
+        if 'BTN_START' in name_or_list: return 'BTN_START (Start)'
+        if 'BTN_SELECT' in name_or_list: return 'BTN_SELECT (Select)'
+        return name_or_list[0] # Fallback to the first name in the list
+    elif name_or_list:
+        return name_or_list
+    else:
+        return f"Code {button_code}"
 
 def run_application_loop(gamepad_device_object):
     global current_app_state 
@@ -110,15 +122,14 @@ def run_application_loop(gamepad_device_object):
     gamepad = gamepad_device_object
     print(f"\nApplication ready. Using gamepad: {gamepad.name}")
     
-    # Correctly get button names from codes
-    start_stop_key_name = ecodes.bytype[ecodes.EV_KEY].get(config.BTN_ACTION_START_STOP, f"Code {config.BTN_ACTION_START_STOP}")
-    quit_key_name = ecodes.bytype[ecodes.EV_KEY].get(config.BTN_ACTION_QUIT, f"Code {config.BTN_ACTION_QUIT}")
-    
+    # Get user-friendly button names for prompts
+    start_stop_key_name = get_user_friendly_button_name(config.BTN_ACTION_START_STOP, 'BTN_SOUTH') # Prefer BTN_SOUTH if available
+    quit_key_name = get_user_friendly_button_name(config.BTN_ACTION_QUIT, 'BTN_START') # Prefer BTN_START
+
     current_app_state = STATE_IDLE
-    # The video path in config is already "videos/idle.mp4" etc.
     video_manager.start_looping_video(config.VIDEO_IDLE) 
     print(f"--- STATE: {current_app_state} ---")
-    print(f"Controls: Press '{start_stop_key_name}' to Start. Press '{quit_key_name}' to Exit.")
+    print(f"Controls: Press '{start_stop_key_name}' to Start/Stop. Press '{quit_key_name}' to Exit.")
 
     if not os.path.exists(config.TEMP_DIR):
         os.makedirs(config.TEMP_DIR, exist_ok=True)
@@ -132,9 +143,10 @@ def run_application_loop(gamepad_device_object):
             if should_quit_application: break
 
             if event.type == ecodes.EV_KEY:
-                # --- FIX 1: Move categorize here ---
                 key_event = categorize(event) 
-                if key_event.keystate == ecodes.KeyEvent.key_down: # Process only on button press
+                # --- FIX for AttributeError: Use key_event.key_down (instance attribute) ---
+                # key_event.key_down is 1, key_event.key_up is 0, key_event.key_hold is 2
+                if key_event.keystate == key_event.key_down: # This checks if the button was just pressed
                     
                     if event.code == config.BTN_ACTION_QUIT:
                         print(f"'{quit_key_name}' pressed. Signaling exit...")
@@ -149,7 +161,7 @@ def run_application_loop(gamepad_device_object):
                         if current_app_state == STATE_IDLE:
                             print(f"'{start_stop_key_name}' pressed in IDLE state.")
                             current_app_state = STATE_LISTENING
-                            video_manager.start_looping_video(config.VIDEO_LISTENING) # Pass full relative path
+                            video_manager.start_looping_video(config.VIDEO_LISTENING)
                             print(f"--- STATE: {current_app_state} ---")
                             current_recording_thread = audio_recorder.start_recording_thread(config.TEMP_RECORDING_FILENAME)
                             if current_recording_thread:
@@ -159,7 +171,7 @@ def run_application_loop(gamepad_device_object):
                                 current_app_state = STATE_IDLE
                                 video_manager.start_looping_video(config.VIDEO_IDLE)
                                 print(f"--- STATE: {current_app_state} ---")
-                                print(f"Controls: Press '{start_stop_key_name}' to Start. Press '{quit_key_name}' to Exit.")
+                                print(f"Controls: Press '{start_stop_key_name}' to Start/Stop. Press '{quit_key_name}' to Exit.")
 
                         elif current_app_state == STATE_LISTENING:
                             print(f"'{start_stop_key_name}' pressed in LISTENING state. Stopping recording...")
@@ -186,12 +198,16 @@ def run_application_loop(gamepad_device_object):
                             current_app_state = STATE_IDLE
                             video_manager.start_looping_video(config.VIDEO_IDLE)
                             print(f"--- STATE: {current_app_state} ---")
-                            print(f"Controls: Press '{start_stop_key_name}' to Start. Press '{quit_key_name}' to Exit.")
+                            print(f"Controls: Press '{start_stop_key_name}' to Start/Stop. Press '{quit_key_name}' to Exit.")
             if should_quit_application: break
-    # ... (rest of the try...except...finally block as before) ...
-    except KeyboardInterrupt: print("\nExiting application due to KeyboardInterrupt.") # ... (cleanup as before)
-    except OSError as e: print(f"OSError in gamepad read_loop (gamepad disconnected?): {e}")
-    except Exception as e: print(f"Unexpected error in application loop: {e}"); import traceback; traceback.print_exc()
+    except KeyboardInterrupt: 
+        print("\nExiting application due to KeyboardInterrupt.")
+        if current_app_state == STATE_LISTENING and current_recording_thread and current_recording_thread.is_alive():
+            print("Stopping active recording..."); audio_recorder._stop_event.set(); current_recording_thread.join(timeout=2)
+    except OSError as e: 
+        print(f"OSError in gamepad read_loop (gamepad disconnected?): {e}")
+    except Exception as e: 
+        print(f"Unexpected error in application loop: {e}"); import traceback; traceback.print_exc()
     finally:
         video_manager.stop_current_video() 
         print("Application main loop finished.")
