@@ -12,6 +12,18 @@ import config # User and application configurations
 import audio_recorder
 import audio_uploader
 import audio_player
+import os
+
+def clear_screen():
+    """Clears the terminal screen."""
+    # For Windows
+    if os.name == 'nt':
+        os.system('cls')
+    # For macOS and Linux
+    else:
+        os.system('clear')
+
+# You would then call clear_screen() at the appropriate point in your application's loop.
 
 def detect_gamepad_interactively(timeout_seconds=config.GAMEPAD_DETECT_TIMEOUT_S):
     """
@@ -125,6 +137,7 @@ def run_application_loop(gamepad_device_object):
     print(f"\nApplication ready. Using gamepad: {gamepad.name}")
     start_stop_key_name = ecodes.KEY.get(config.BTN_ACTION_START_STOP, f"Code {config.BTN_ACTION_START_STOP}")
     quit_key_name = ecodes.KEY.get(config.BTN_ACTION_QUIT, f"Code {config.BTN_ACTION_QUIT}")
+    clear_screen()
     print(f"--- Controls ---")
     print(f"- Press '{start_stop_key_name}' to Start/Stop Recording.")
     print(f"- Press '{quit_key_name}' to Exit Application.")
