@@ -5,7 +5,31 @@ Configuration constants for the Audio Chatter application.
 import tempfile
 import pyaudio # For PYAUDIO_FORMAT
 from evdev import ecodes # For button codes
+import os # Make sure this is at the top if not already present
 
+
+
+# --- Video Configuration ---
+# Assumes videos are in a 'videos' subdirectory of your APP_DIR.
+# You'll need to create these video files.
+VIDEO_BASE_PATH = "videos" # Relative to your main application directory
+VIDEO_IDLE = os.path.join(VIDEO_BASE_PATH, "idle.mp4")
+VIDEO_LISTENING = os.path.join(VIDEO_BASE_PATH, "listening.mp4")
+VIDEO_THINKING = os.path.join(VIDEO_BASE_PATH, "thinking.mp4") # e.g., during upload & server wait
+VIDEO_TALKING = os.path.join(VIDEO_BASE_PATH, "talking.mp4")  # e.g., while server response audio plays
+
+# Command for VLC (cvlc) to play video, loop, without OSD, non-interactive.
+VIDEO_PLAYER_COMMAND_TEMPLATE = [
+    'cvlc',
+    '--no-osd',         # No On-Screen Display
+    '--no-interact',    # Disable dummy interface, run in background
+    '--loop',           # Loop the video
+    '--no-video-title-show', # Don't show the title
+    # '--fullscreen',   # Uncomment if you want fullscreen
+    # Video path will be appended to this list
+]
+
+# ... (all your other existing configurations for audio, gamepad, etc.) ...
 # --- Audio Configuration ---
 SAMPLE_RATE = 48000
 CHANNELS = 1
