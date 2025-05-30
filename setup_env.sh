@@ -19,8 +19,8 @@ echo "Step 3: Installing system dependencies..."
 # ffmpeg for ffplay (audio response playback)
 # libudev-dev for evdev (gamepad input)
 # evtest for gamepad diagnostics
-# vlc-nox for cvlc (video playback, no X11 needed for basic operation)
-sudo apt-get install -y libportaudio2 portaudio19-dev alsa-utils ffmpeg libudev-dev evtest vlc-nox
+# vlc-bin for cvlc (video playback, no X11 needed for basic operation)
+sudo apt-get install -y libportaudio2 portaudio19-dev alsa-utils ffmpeg libudev-dev evtest vlc-bin
 
 # ... (rest of the script: requirements.txt check, venv creation, pip install) ...
 
