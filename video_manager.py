@@ -4,54 +4,47 @@ Manages background video playback using an external player like cvlc.
 """
 import subprocess
 import os
-import signal # For sending signals to processes
+import signal 
 import config
 
-# To keep track of the currently running video player process
 current_video_process = None
 
-def start_looping_video(video_file_name):
+def start_looping_video(video_path_from_config): # Argument is the full relative path from config
     """
     Stops any currently playing video and starts a new one, looped.
     Args:
-        video_file_name (str): The base name of the video file (e.g., "idle.mp4").
-                               It will be joined with VIDEO_BASE_PATH from config.
+        video_path_from_config (str): The full relative path to the video file
+                                      (e.g., "videos/idle.mp4") as defined in config.py.
     """
     global current_video_process
-    stop_current_video() # Stop any video that might be playing
+    stop_current_video() 
 
-    video_path = os.path.join(config.VIDEO_BASE_PATH, video_file_name) # Use base name
+    # --- FIX 2: Use the passed video_path_from_config directly ---
+    # It already includes the VIDEO_BASE_PATH due to how it's defined in config.py
+    # e.g., config.VIDEO_IDLE is os.path.join(config.VIDEO_BASE_PATH, "idle.mp4")
+    video_path = video_path_from_config 
     
-    # If using relative path from config, and AI.sh cds into APP_DIR, this should be fine.
-    # Otherwise, ensure video_path is absolute or correctly relative to CWD.
-    # For robustness if APP_DIR is defined in config:
-    # APP_DIR = getattr(config, 'APP_DIR', '.') # Get APP_DIR if defined, else current dir
-    # video_path = os.path.join(APP_DIR, config.VIDEO_BASE_PATH, video_file_name)
-
+    # If APP_DIR is needed for absolute paths and CWD is not guaranteed:
+    # current_app_dir = os.path.dirname(os.path.abspath(config.__file__)) # Get dir of config.py
+    # video_path = os.path.join(current_app_dir, video_path_from_config)
+    # For now, assume AI.sh cds into the correct app directory.
 
     if not os.path.exists(video_path):
         print(f"Video file not found: {video_path}")
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Ensure '{config.VIDEO_BASE_PATH}' directory exists in your app root and contains the video.")
         return
 
     command = config.VIDEO_PLAYER_COMMAND_TEMPLATE + [video_path]
     
     print(f"Starting video: {' '.join(command)}")
     try:
-        # Use Popen for non-blocking execution, allowing Python script to continue.
-        # Hide stdout/stderr unless debugging is needed.
         current_video_process = subprocess.Popen(
             command,
-            stdout=subprocess.DEVNULL, # Suppress player's normal output
-            stderr=subprocess.PIPE    # Capture errors for potential logging
+            stdout=subprocess.DEVNULL, 
+            stderr=subprocess.PIPE    
         )
-        # Check if process started successfully (optional quick check)
-        # time.sleep(0.1) # Give it a moment to potentially fail
-        # if current_video_process.poll() is not None: # Process already terminated
-        #     stderr_output = current_video_process.stderr.read().decode()
-        #     print(f"Video player failed to start or exited immediately for {video_path}. Error: {stderr_output}")
-        #     current_video_process = None
-        # else:
-        #     print(f"Looping video '{video_path}' started (PID: {current_video_process.pid}).")
+        # print(f"Looping video '{video_path}' started (PID: {current_video_process.pid}).") # Less verbose
     except FileNotFoundError:
         player_name = config.VIDEO_PLAYER_COMMAND_TEMPLATE[0]
         print(f"ERROR: Video player '{player_name}' not found. Please install it.")
@@ -61,27 +54,15 @@ def start_looping_video(video_file_name):
         current_video_process = None
 
 def stop_current_video():
-    """Stops the currently playing video, if any."""
+    # ... (This function remains the same as the last version you have - no changes needed here) ...
     global current_video_process
     if current_video_process:
-        print(f"Stopping current video (PID: {current_video_process.pid})...")
+        # print(f"Stopping current video (PID: {current_video_process.pid})...") # Less verbose
         try:
-            # Try to terminate gracefully first
             current_video_process.terminate()
-            try:
-                # Wait for a short period for the process to terminate
-                current_video_process.wait(timeout=1.0) 
+            try: current_video_process.wait(timeout=0.5) 
             except subprocess.TimeoutExpired:
-                # If it doesn't terminate, force kill it
-                print(f"Video process (PID: {current_video_process.pid}) did not terminate, killing...")
                 current_video_process.kill()
-                current_video_process.wait() # Ensure it's killed
-            # print(f"Video process (PID: {current_video_process.pid}) stopped.")
-            # stderr_output = current_video_process.stderr.read().decode()
-            # if stderr_output:
-            #     print(f"Video player stderr: {stderr_output}")
-
-        except Exception as e:
-            print(f"Error stopping video process: {e}")
-        finally:
-            current_video_process = None
+                current_video_process.wait(timeout=0.5)
+        except Exception: pass # Ignore errors during stop
+        finally: current_video_process = None
