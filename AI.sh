@@ -2,55 +2,67 @@
 
 # --- RetroPie Port Launch Script for AI Audio Chatter ---
 APP_DIR="/home/pi/talk" # Example path, PLEASE CHANGE THIS
-VENV_NAME="venv_audio_chatter_pyaudio"
+
+VENV_NAME="venv_audio_chatter_pyaudio" 
 VENV_PATH="${APP_DIR}/${VENV_NAME}"
-PYTHON_MAIN_SCRIPT_NAME="main.py"
+PYTHON_MAIN_SCRIPT_NAME="main.py" 
 PYTHON_MAIN_SCRIPT_PATH="${APP_DIR}/${PYTHON_MAIN_SCRIPT_NAME}"
-PYTHON_WAIT_SCRIPT_NAME="wait_for_exit_input.py" # Name of our new helper script
-PYTHON_WAIT_SCRIPT_PATH="${APP_DIR}/${PYTHON_WAIT_SCRIPT_NAME}"
+
+# --- Debugging Setup: Redirect all output to a log file ---
+# Useful if the script exits immediately without showing output on screen.
+# Comment out the 'exec' line for normal operation once tested.
+LOG_FILE="/tmp/AI_sh_debug.log"
+echo "AI.sh Log Start: $(date)" > "$LOG_FILE"
+exec >> "$LOG_FILE" 2>&1 # Redirect stdout and stderr to log file
+# set -x # Uncomment for very verbose command execution logging
 
 echo "--------------------------------------"
 echo " RetroPie Port: AI Audio Chatter      "
-# ... (rest of the initial checks and echos remain the same as your last AI.sh) ...
-echo "Application Directory: ${APP_DIR}"
-echo "Virtual Environment: ${VENV_PATH}"
-echo "Python Main Script: ${PYTHON_MAIN_SCRIPT_PATH}"
+echo "--------------------------------------"
+echo "App Dir: ${APP_DIR}"
+echo "Venv:    ${VENV_PATH}"
+echo "Script:  ${PYTHON_MAIN_SCRIPT_PATH}"
 echo ""
 
-if [ ! -d "$APP_DIR" ]; then /* ... (error checks as before) ... */ fi
-if [ ! -f "$PYTHON_MAIN_SCRIPT_PATH" ]; then /* ... */ fi
-if [ ! -f "${VENV_PATH}/bin/activate" ]; then /* ... */ fi
-if [ ! -f "$PYTHON_WAIT_SCRIPT_PATH" ]; then
-    echo "ERROR: Python helper script '$PYTHON_WAIT_SCRIPT_PATH' not found."
-    echo "Please ensure it exists in the APP_DIR."
-    sleep 10
+# Basic checks
+if [ ! -d "$APP_DIR" ]; then
+    echo "ERROR: APP_DIR '$APP_DIR' not found." >&2 # Ensure errors go to log if exec is active
+    exit 1
+fi
+if [ ! -f "$PYTHON_MAIN_SCRIPT_PATH" ]; then
+    echo "ERROR: Main script '$PYTHON_MAIN_SCRIPT_PATH' not found." >&2
+    exit 1
+fi
+if [ ! -f "${VENV_PATH}/bin/activate" ]; then
+    echo "ERROR: Venv activation script not found at '${VENV_PATH}/bin/activate'." >&2
     exit 1
 fi
 
 echo "Changing to application directory: $APP_DIR"
-cd "$APP_DIR" || { /* ... */ }
+cd "$APP_DIR" || { echo "ERROR: Failed to cd to '$APP_DIR'." >&2; exit 1; }
 
 echo "Starting AI Audio Chatter Python application..."
-echo "(You will interact with the script in this terminal view)"
+echo "(Output will appear here or in $LOG_FILE if redirection is active)"
 echo ""
 
+# Run the Python main script within its virtual environment
+# The Python script (main.py) now handles its own exit based on gamepad input.
 (
-    echo "Activating virtual environment..."
-    source "${VENV_PATH}/bin/activate" || { echo "ERROR: Failed to activate venv."; }
-    echo "Launching: python $PYTHON_MAIN_SCRIPT_NAME"
-    echo "--------------------------------------"
+    # echo "Subshell: Activating virtual environment..." # Less verbose for final version
+    source "${VENV_PATH}/bin/activate" || {
+        echo "ERROR INSIDE SUBSHELL: Failed to activate virtual environment." >&2
+        exit 1 
+    }
+    # echo "Subshell: Launching: python $PYTHON_MAIN_SCRIPT_NAME" # Less verbose
     python "$PYTHON_MAIN_SCRIPT_NAME"
+    # echo "Subshell: Python main script finished." # Less verbose
 )
+# script_exit_status=$? # Can be logged if needed
 
 echo ""
 echo "--------------------------------------"
-echo "AI Audio Chatter script has finished."
-echo "Press Enter (Keyboard) or Start Button (Gamepad) to return to RetroPie menu..."
+echo "AI Audio Chatter application has exited."
+echo "Returning to RetroPie menu."
+# No 'read -r' needed here, Python script controls its own lifecycle.
 
-# Call the Python helper script to wait for Enter or Gamepad Start button
-# It uses the same virtual environment's Python interpreter.
-"${VENV_PATH}/bin/python" "$PYTHON_WAIT_SCRIPT_NAME"
-
-# The helper script will exit after input or timeout, then this script continues.
-echo "Returning to RetroPie..." # Optional message
 exit 0
