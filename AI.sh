@@ -13,7 +13,7 @@ PYTHON_MAIN_SCRIPT_PATH="${APP_DIR}/${PYTHON_MAIN_SCRIPT_NAME}"
 # Comment out the 'exec' line for normal operation once tested.
 LOG_FILE="/tmp/AI_sh_debug.log"
 echo "AI.sh Log Start: $(date)" > "$LOG_FILE"
-exec >> "$LOG_FILE" 2>&1 # Redirect stdout and stderr to log file
+#exec >> "$LOG_FILE" 2>&1 # Redirect stdout and stderr to log file
 # set -x # Uncomment for very verbose command execution logging
 
 echo "--------------------------------------"
