@@ -12,7 +12,7 @@ import config
 import audio_recorder
 import audio_uploader
 import audio_player
-import video_manager 
+import #video_manager 
 
 # --- Application States ---
 STATE_IDLE = "IDLE"
@@ -127,7 +127,7 @@ def run_application_loop(gamepad_device_object):
     quit_key_name = get_user_friendly_button_name(config.BTN_ACTION_QUIT, 'BTN_START') # Prefer BTN_START
 
     current_app_state = STATE_IDLE
-    video_manager.start_looping_video(config.VIDEO_IDLE) 
+    #video_manager.start_looping_video(config.VIDEO_IDLE) 
     print(f"--- STATE: {current_app_state} ---")
     print(f"Controls: Press '{start_stop_key_name}' to Start/Stop. Press '{quit_key_name}' to Exit.")
 
@@ -161,7 +161,7 @@ def run_application_loop(gamepad_device_object):
                         if current_app_state == STATE_IDLE:
                             print(f"'{start_stop_key_name}' pressed in IDLE state.")
                             current_app_state = STATE_LISTENING
-                            video_manager.start_looping_video(config.VIDEO_LISTENING)
+                            #video_manager.start_looping_video(config.VIDEO_LISTENING)
                             print(f"--- STATE: {current_app_state} ---")
                             current_recording_thread = audio_recorder.start_recording_thread(config.TEMP_RECORDING_FILENAME)
                             if current_recording_thread:
@@ -169,7 +169,7 @@ def run_application_loop(gamepad_device_object):
                             else:
                                 print("Failed to start recording thread. Returning to IDLE.")
                                 current_app_state = STATE_IDLE
-                                video_manager.start_looping_video(config.VIDEO_IDLE)
+                                #video_manager.start_looping_video(config.VIDEO_IDLE)
                                 print(f"--- STATE: {current_app_state} ---")
                                 print(f"Controls: Press '{start_stop_key_name}' to Start/Stop. Press '{quit_key_name}' to Exit.")
 
@@ -178,13 +178,13 @@ def run_application_loop(gamepad_device_object):
                             if audio_recorder.stop_and_save_recording(current_recording_thread, config.TEMP_RECORDING_FILENAME):
                                 if os.path.exists(temp_recording_full_path) and os.path.getsize(temp_recording_full_path) > 44:
                                     current_app_state = STATE_THINKING
-                                    video_manager.start_looping_video(config.VIDEO_THINKING)
+                                    #video_manager.start_looping_video(config.VIDEO_THINKING)
                                     print(f"--- STATE: {current_app_state} ---")
                                     print("Uploading and waiting for server response...")
                                     response_audio_path = audio_uploader.upload_audio(temp_recording_full_path)
                                     if response_audio_path:
                                         current_app_state = STATE_TALKING
-                                        video_manager.start_looping_video(config.VIDEO_TALKING)
+                                        #video_manager.start_looping_video(config.VIDEO_TALKING)
                                         print(f"--- STATE: {current_app_state} ---")
                                         print("Playing server response...")
                                         audio_player.play_audio_external(response_audio_path)
@@ -196,7 +196,7 @@ def run_application_loop(gamepad_device_object):
                                 else: print(f"Recording file {temp_recording_full_path} invalid. Not uploading.")
                             else: print("Failed to save recording or recording was empty.")
                             current_app_state = STATE_IDLE
-                            video_manager.start_looping_video(config.VIDEO_IDLE)
+                            #video_manager.start_looping_video(config.VIDEO_IDLE)
                             print(f"--- STATE: {current_app_state} ---")
                             print(f"Controls: Press '{start_stop_key_name}' to Start/Stop. Press '{quit_key_name}' to Exit.")
             if should_quit_application: break
@@ -209,7 +209,7 @@ def run_application_loop(gamepad_device_object):
     except Exception as e: 
         print(f"Unexpected error in application loop: {e}"); import traceback; traceback.print_exc()
     finally:
-        video_manager.stop_current_video() 
+        #video_manager.stop_current_video() 
         print("Application main loop finished.")
         if os.path.exists(temp_recording_full_path) and os.path.isfile(temp_recording_full_path):
             try: os.remove(temp_recording_full_path)
